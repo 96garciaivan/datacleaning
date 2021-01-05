@@ -20,6 +20,14 @@ Este conjunto ha sido proporcionado por la empresa Scania y están disponibles e
 
 https://archive.ics.uci.edu/ml/datasets/APS+Failure+at+Scania+Trucks
 
+## Contenido
+
+El contenido de este proyecto consta de 3 archivos:
+
+- PRA2_I-Garcia_I-Ricondo.Rmd: Incluye todo el código en lenguaje 3 que ha sido utilizado para el proyecto.
+- PRA2_I-Garcia_I-Ricondo.html: Contiene el renderizado en HTML del código del proyecto.
+- PRA2_I-Garcia_I-Ricondo.pdf:  Contiene el renderizado en pdf del código del proyecto.
+
 ## Licencia
 
 El set de datos utilizado para este proyecto tiene licencia bajo la GNU General Public License.
