@@ -1,0 +1,1340 @@
+---
+title: 'Tipología y ciclo de vida de los datos: Práctica 2'
+author: "Iván García Jiménez, Itziar Ricondo"
+date: "5 de enero de 2021"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '2'
+  word_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+******
+# Tareas a realizar en la práctica
+******
+
+**El presente trabajo está disponible en https://github.com/96garciaivan/scania-data-cleaning**
+
+Siguiendo las principales etapas de un proyecto analítico, las diferentes tareas a realizar (y justificar) son las siguientes:
+
+**1. Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?**
+
+**2. Integración y selección de los datos de interés a analizar.**
+
+**3. Limpieza de los datos.**
+
+  3.1. ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno
+de estos casos?
+
+  3.2. Identificación y tratamiento de valores extremos.
+
+**4. Análisis de los datos.**
+
+  4.1. Selección de los grupos de datos que se quieren analizar/comparar (planificación
+de los análisis a aplicar).
+
+  4.2. Comprobación de la normalidad y homogeneidad de la varianza.
+
+  4.3. Aplicación de pruebas estadísticas para comparar los grupos de datos. En función
+de los datos y el objetivo del estudio, aplicar pruebas de contraste de hipótesis,
+correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis
+diferentes.
+
+**5. Representación de los resultados a partir de tablas y gráficas.**
+
+**6. Resolución del problema. A partir de los resultados obtenidos, ¿cuáles son las conclusiones? ¿Los resultados permiten responder al problema?**
+
+**7. Código: Hay que adjuntar el código, preferiblemente en R, con el que se ha realizado la limpieza, análisis y representación de los datos. Si lo preferís, también podéis trabajar en Python.**
+
+
+******
+# Descripción del dataset. 
+******
+¿Por qué es importante y qué pregunta/problema pretende responder?
+
+## Sobre el conjunto de datos
+
+Este conjunto de datos contiene datos de uso de camiones de gran tonelaje de Scania. El caso de estudio se centra en el Sistema de Aire a Presión (APS, del inglés *Air Pressure System*), sistema responsable de proveer de aire comprimido a varias de las funciones del camión, como el freno o embrague. Los casos con clase positiva son fallos de componentes relacionados con el sistema APS. Por el contrario, los caos con clase negativa corresponden a fallos de componentes no relacionados con el APS. El conjunto de datos presenta casos de ambos tipos, si bien es cierto que los casos negativos son mucho más frecuentes.
+
+El objetivo del conjunto de datos es predecir qué tipo de fallos tienen su origen en el sistema APS y cuáles son debidos a otras causas. Este hecho tiene repercusión en las revisiones o reparaciones a realizar sobre el camión. De hecho, la bondad de la predicción se medirá en términos de coste. El coste total se evaluará como la suma de fallos de tipo 1 por el coste asociado (Coste1) más la suma de fallos de tipo 2 por el coste asociado (Coste2).Un error de tipo I se origina cuando el modelo predice positivo cuando en realidad el fallo no tiene origen en un componente el APS. El coste 1 asociado a este hecho es debido a la revisión innecesaria del APS que debe ser realizada en el taller, que se ha valorado en 10 unidades. Por el contrario, el error de tipo II podría tener como resultado permitir el tráfico del camión con defecto en un componente APS, que puede causar una averís. El coste 2 asociado a este tipo de fallo es superior y se ha valorado en 500 unidades. El mejor modelo de predicción será aquel que minimice el coste total.
+
+Este conjunto ha sido proporcionado por la empresa Scania y está disponibles en el repositorio UCI Machine Learning Repository [[1]][paginaweb1] (https://archive.ics.uci.edu/ml/datasets/APS+Failure+at+Scania+Trucks). Los datos proporcionados son un conjunto de datos de entrenamiento y otro de validación.
+
+**Este conjunto de datos trata sobre la predicción de fallos**. Se ha seleccionado este conjunto de datos porque la identificación del estado de componentes (desgaste, fallo, vida remanente) es un tema de gran relevancia dentro de las iniciativas de Industria 4.0 y, en concreto, de técnicas de análisis de datos, minería y aprendizaje automático. 
+
+Por otro lado, este conjunto de datos presenta una serie de retos para los autores de este análisis, que se listan a continuación:
+
+-  Gran número de variables y además las variables están anonimizadas.  El conjunto de datos de entrenamiento presenta 171 variables y 60000 observaciones. El hecho de que se hayan recodificado (anonimizado) las variables impide tener información física adicional que ayude en la interpretación. Sí se menciona el hecho de que algunas variables son atributos y otras representan histogramas. El número tan elevado de variables implica que **se tendrán que utilizar herramientas que permitan automatizar el tratamiento de los datos**, que supone un hecho diferencial sobre el tipo de tratamientos realizados hasta ahora por nosotros.
+
+- Los casos positivos y negativos están desequilibrados. Deberá analizarse qué implica este hecho en el análisis de los datos.
+
+- El conjunto de datos tiene un fuerte carácter industrial. El resultado debe ayudar en la toma de decisiones desde una perspectiva de coste.
+
+
+******
+# Integración y selección de los datos de interés a analizar
+******
+
+## Lectura del archivo de datos:
+
+El dataset está compuesto por 2 archivos: aps_failure_training_set.csv que contiene los datos para entrenar el modelo, y aps_failure_test_set.csv que contiene los datos para evaluarlo.
+
+Debido a la gran cantidad de datos del dataset, se ha optado por leerlos mediante la función "fread" de la librería "data.table" [[2]][paginaweb2] , ya que esta función permite una lectura de datos más rápida que con la función "read.csv". 
+
+En la descripción del dataset de UCI Machine Learning Repository, se nos informa de antemano que el dataset contiene valores nulos (perdidos) asignados como "na", lo indicamos por parámetro en la función fread para que capte de manera correcta los valores perdidos.
+
+```{r}
+if (!require("data.table")) install.packages("data.table")
+library(data.table)
+# Lectura de los dataset de train y test
+url_train <- "https://archive.ics.uci.edu/ml/machine-learning-databases/00421/aps_failure_training_set.csv"
+url_test <- "https://archive.ics.uci.edu/ml/machine-learning-databases/00421/aps_failure_test_set.csv"
+rtrain <- fread(url_train, na.strings = "na", strip.white = TRUE)
+rtest <- fread(url_test, na.strings = "na", strip.white = TRUE)
+# Dimensiones del dataset
+dim(rtrain)
+```
+
+Podemos ver que el conjunto de entrenamiento contiene una gran cantidad de datos, 60000 registros y 171 atributos; a continuación vemos su estructura.
+
+```{r}
+# Estructura del dataset
+str(rtrain)
+```
+
+## Consideraciones iniciales sobre la estructura de los datos
+
+Los datos son leídos como chart, hay que pasar a numeric.
+La primera variable del dataset es la clase, es decir, el valor a predecir. El resto de las variables son numéricas, pero algunas se han asignado como integer64, para evitar errores se ha decidido transformar las variables de tipo integer64 a tipo entero.
+
+```{r,warning = FALSE}
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
+is.integer64 <- function(x){class(x)=="integer64"}
+rtrain <- rtrain %>% mutate_if(is.integer64, as.integer)
+rtest <- rtest %>% mutate_if(is.integer64, as.integer)
+```
+
+Nos interesa ver cómo se distribuye la variable de clasificación, esto influye considerablemente tanto en la limpieza a realizar como en su análisis posterior. El 98.3% de los casos son negativos y el 12.7% positivos, esto es, existe un desequilibrio grande entre los datos.
+
+```{r}
+# visualizamos la distribución de la variable class
+library(ggplot2)
+qplot(as.factor(rtrain$class), xlab = "class")
+prop.table(table(rtrain$class))
+```
+
+Podemos observar un claro desequilibrio entre clases, tenemos muchos más camiones que han dado negativo (98.33%) que camiones que han dado positivo (16.66%). Este desequilibrio es algo que se debe tener en cuenta al tratar con este dataset.
+
+Se hace un screening de datos mediante las funciones "ExpData"de la librería "SmartEDA"  y "skim" de la libreria "skimr" [[3]][paginaweb3]. Se ha decidido utilizar estas funciones en vez de "summary", ya que al tener grandes cantidades de datos, es más visual ver un atributo por fila tal y como vemos a continuación:
+
+```{r}
+if (!require("SmartEDA")) install.packages("SmartEDA")
+library(SmartEDA)
+library(skimr)
+## EDA, Datos faltantes, ceros y outliers
+ExpData(data=rtrain,type=1)
+eda_skim<-skim(rtrain)
+eda_skim
+```
+
+
+******
+# Limpieza de los datos
+******
+
+Se puede apreciar cómo muchos de los atributos tienes ceros hasta el tercer cuartil, esto es algo que se debe revisar para entender a qué se debe y cómo gestionarlo. También hay valores atributos que presentan una baja completitud, para tratar los datos nulos (missing values) comenzamos por visualizar el porcentaje de valores perdidos de cada atributo; los mostramos en orden descendente para poder ver claramente qué atributos contienen mayor porcentaje de valores perdidos.
+
+## Gestión de ceros y datos perdidos
+
+```{r}
+# Estadísticas de valores vacíos
+sort(colMeans(is.na(rtrain)), decreasing = TRUE)
+```
+
+Se puede ver que hay atributos con más de un 20% de valores perdidos, por lo tanto se ha decicido eliminar estos atributos y trabajar únicamente con el resto.De hecho, existen 8 variables con más del 50% de los valores perdidos. Tras eliminar las variables con más del 20% de los valores perdidos nos quedamos con 147 variables.
+
+```{r}
+columns_to_remove <- which(colMeans(is.na(rtrain)) > 0.2)
+ctrain = subset(rtrain, select = -c(columns_to_remove) )
+ctest = subset(rtest, select = -c(columns_to_remove) )
+dim(ctrain)
+```
+
+El resto de valores perdidos deberíamos imputarlos o eliminarlos, pero antes hay una duda que resolver, igual que hay columnas con un alto porcentaje de valores perdidos, es posible que también haya filas con un alto porcentaje de valores perdidos. Alrededor de 180 filas contienen más del 95% de valores perdidos y 354 filas contienen más del 50% de sus valores perdidos. 
+
+```{r}
+head(sort(rowMeans(is.na(ctrain)), decreasing = TRUE),200)
+```
+
+Podemos ver que hay filas en las que el porcentaje de nulos es superior al 50%, es decir que desconocemos la mayoría de valores de esta fila. Veamos si el hecho de desconocer estos valores influye en que la clase sea negativa o positiva.
+
+```{r}
+null_rows <- filter(ctrain, rowMeans(is.na(ctrain)) > 0.5)
+qplot(as.factor(null_rows$class), xlab = "class")
+prop.table(table(null_rows$class))
+```
+
+Podemos ver cómo la distribución obtenida para estos datos es muy parecida a la del total de los datos, por lo tanto, el hecho de desconocer la mayoría de valores de una fila no influye en que la clase sea negativa o positiva. Esto permite eliminar estos registros de nuestro data set.
+
+```{r}
+ctrain <- filter(ctrain, rowMeans(is.na(ctrain)) < 0.5)
+dim(ctrain)
+```
+
+Existen varios métodos para imputar los valores perdidos. Una opción podría ser eliminar los valores perdidos. Otra opción sería sustituir estos valores perdidos por un estadístico de la variable, como puede ser la media, mediana o moda. Este enfoque puede dar buenos resultados cuando la variabilidad de la variable es pequeña. Otros métodos más ajustados optan por una imputación que tenga en cuenta múltiples valores, como pueden ser km basado en la búsqueda de vecinos cercanos o árboles de decisión (missforest).
+
+En este momento se van a realizar dos tipos de imputaciones, por la mediana y mediante vecinos (paquete ClustImpute)[[4]] [paginaweb4], cada uno de ellos con un nombre de conjunto de datos tratado diferente. En la parte de análisis se comparará los resultados obtenidos mediante cada tipo de imputación. El tiempo de ejecución entre los dos tipos de imputación es significativamente diferente, casi instantáneo en el caso de imputación por la mediana y más de 2 minutos para el caso de k-Means.
+
+Debe comentarse en este apartado que **no se ha podido utilizar el algoritmo de imputación missForest**. Los autores de este trabajo suponen que se debe al alto coste computacional de implementación de esta técnica [[5]][paginaweb5] sobre un conjunto de datos tan grande (training original de 60000 filas x 171 columnas). El hecho es que R se quedaba bloqueado al intentar aplicar la técnica, por lo que se ha tenido que desistir en su uso.
+
+**La ventaja del algoritmo de ClustImpute es que es computacionalmente más eficiente que otros**, como el paquete MICE o missForest, los cuales no han sido posibles implantar con el total de los casos.
+
+
+```{r}
+# Imputación mediana
+library(imputeMissings)
+ctrain_median <- impute(ctrain, object = NULL, method = "median/mode", flag = FALSE)
+ctest_median <- impute(ctest, object = NULL, method = "median/mode", flag = FALSE)
+```
+
+```{r}
+# Imputación k-means
+library(ClustImpute)
+## k-means a training
+ctrain_num <- ctrain[,2:147]
+t0<-proc.time()
+train.km <- ClustImpute(ctrain_num, nr_cluster=7)
+t1<-proc.time()
+t1-t0
+ctrain_km<-ctrain[,1]
+ctrain_km <- cbind(ctrain_km,train.km$complete_data)
+eda_skim<-skim(ctrain_km)
+eda_skim
+## km a testing
+ctest_num <- ctest[,2:147]
+test.km <- ClustImpute(ctest_num, nr_cluster=5)
+ctest_km<-ctest[,1]
+ctest_km <- cbind(ctest_km,test.km$complete_data)
+```
+
+Se realiza una muestra reducida (1992 casos) de la muestra de training (996 de clase negativa y 996 (todos) de la positiva) para ejecutar missForest. El tiempo de ejecución ha sido 33,8 min. Extrapolando, podría estimarse que (de ser satisfactorio) se necesitarían más de 21 horas para la imputación de 128 variables sobre un conjunto de aproximadadamente 76000 filas (60000 de training y 16000 filas), menos los eliminados por muy elevado porcentaje de perdidos. Se comentan las líneas de la implementación de missForest sobre la muestra, por el alto tiempo de ejecución.
+
+```{r}
+# table(ctrain$class)
+# ctrain_neg<-ctrain[ctrain$class=="neg"]
+# ctrain_pos<-ctrain[ctrain$class=="pos"]
+# indices_neg <- sample( 1:nrow(ctrain_neg), 996 )
+# indices_pos <- sample( 1:nrow(ctrain_pos), 996 )
+# ctrain_sample<-ctrain_neg[indices_neg,]
+# ctrain_sample<-rbind(ctrain_sample,ctrain_pos[indices_pos,])
+# ctrain_neg<-NULL
+# ctrain_pos<-NULL
+# 
+# library(missForest)
+# eda_skim<-skim(ctrain_sample)
+# eda_skim
+# dim(ctrain_sample)
+# t2<-proc.time()
+# ctrains_missForest<- missForest(ctrain_sample[1:1992,-1])
+# ctrains_mF<-ctrains_missForest$ximp
+# t3<-proc.time()
+# t3-t2
+```
+
+Una vez tratados los valores perdidos, se procede al tratamiento de ceros, sobre el conjunto de datos con imputación por vecindad. Como se ha visto antes hay atributos en los que hay ceros hasta en el tercer cuartil, vamos a investigar a qué se debe. En la descripción del dataset, se indica que hay 7 variables que están binarizadas en 10 partes, es decir, que hay atributos que ocupan 10 columnas. Seleccionamos los atributos binarizados.
+
+```{r}
+histogram <- ctrain_km[,c(6:15, 32:41, 42:51, 52:61, 88:97, 100:109, 136:145)]
+dim(histogram)
+str(histogram)
+```
+
+Para entender que información contiene estos atributos binarizados se mostrará uno de ellos para el primer camión del dataset.
+
+```{r}
+histogram_1 <- as.numeric(histogram[1, c(1:10)])
+barplot(histogram_1)
+```
+
+Si se suman todos los valores del atributo se obtiene el número total de sucesos. 
+
+```{r}
+sum(histogram_1)
+```
+
+Al hacer la suma en otro atributo también se obtiene el mismo número total de sucesos.
+
+```{r}
+histogram_2 <- as.numeric(histogram[1, c(11:20)])
+sum(histogram_2)
+```
+
+Esto nos hace deducir, que la suma de todos los valores del histograma representa la cantidad de tiempo que el camión ha estado encendido a lo largo de su vida.
+
+Si por ejemplo un atributo es la temperatura, y se divide en 10 intervalos ([-20º,-10º], [-10º, 0º], ... , [70º, 80º] ), tendremos la cantidad de tiempo (por ejemplo minutos) que el camión ha estado en cada intérvalo de temperatura a lo largo de su vida. Al sumar los valores de todos los intérvalos, se obtiene entonces el tiempo total que el camión ha estado encendido a lo largo de su vida.
+
+Por eso la suma, en todos los atributos da siempre el mismo resultado, porque cada atributo se ha monitorizado durante el tiempo que el camión está encendido.
+
+Esto nos hace pensar que los ceros en los histogramas son valores que aportan información útil, y no se deben eliminar o imputar. Ya que si por ejemplo un camión ha estado mucho tiempo en temperaturas extremas, puede afectar gravemente al sistema APS, pero si nunca ha estado en temperaturas extremas, puede que el sistema APS esté en buen estado.
+
+Pasamos a tratar los ceros de los atributos no binarizados.
+
+```{r}
+other <- select(ctrain_km, -colnames(histogram))
+sort(colMeans(other=="0"), decreasing = TRUE)
+```
+
+Se puede apreciar que algunos atributos no binarizados tienen más de un 90% de ceros (en concreto hay 10 atributos que tienen más de un 99% de ceros). Procedemos a eliminar los atributos con más de un 90% de ceros.
+
+```{r}
+columns_to_remove <- which(colMeans(other=="0") > 0.9)
+ctrain_km = subset(ctrain_km, select = -c(columns_to_remove) )
+dim(ctrain_km)
+```
+
+Se identifican también las variables sin variabilidad, aquellas de único valor. Se obtiene que la variable cd_000 presenta un único valor. Se procede a su eliminación.
+
+```{r}
+# Ver valores únicos
+apply(ctrain_km, 2, function(x) length(unique(x)))
+```
+
+Se puede ver como el atributo cd_000 contiene un único valor para el data set, por lo tanto desechamos este atributo.
+
+```{r}
+ctrain_km <- subset(ctrain_km, select=-c(cd_000))
+dim(ctrain_km)
+```
+
+Este sería el conjunto de datos de train con imputación de perdidos por km (train_km) limpio y preparado para el análisis. Se seleccionan las mismas variables para el conjunto train con imputación por mediana (train_median), así como para los conjuntos de test.
+
+```{r}
+# Conjunto de datos de train y test según método de imputación, preparados para análisis
+ctrain_median<-select(ctrain_median, colnames(ctrain_km))
+ctest_km <- select(ctest_km, colnames(ctrain_km))
+ctest_median <- select(ctest_median, colnames(ctrain_km))
+dim(ctest_km)
+```
+
+En este punto se realiza una copia de ambos conjuntos de datos para el inicio del análisis. 
+
+
+```{r}
+train_km<-ctrain_km
+train_median<-ctrain_median
+test_km<-ctest_km
+test_median<-ctest_median
+```
+
+Se seleccionan los datos numéricos y se normalizan. Después de la normalización se vuelve a hacer un screening de datos.
+
+```{r}
+# Escalado para datos con km
+class(train_km)
+train_km_X.scaled <- scale(train_km[,c(2:129)])
+test_km_X.scaled <- scale(test_km[,c(2:129)])
+#eda_skim<-skim(train_km_X.scaled)
+#eda_skim
+
+# Escalado para datos con median
+train_median_X.scaled <- scale(train_median[,c(2:129)])
+test_median_X.scaled <- scale(test_median[,c(2:129)])
+
+```
+
+Con los datos normalizados se hace una reducción de dimensionalidad mediante PCA. Para los datos km el 95% de la varianza queda explicada con 71 componentes principales, mientras que para los datos median el 95% de la varianza queda explicada con 66 componentes principales.
+
+```{r}
+# PCA0 con datos km
+library(pcaMethods)
+train_km.pca <- prcomp(train_km_X.scaled[,c(1:(dim(train_km)[2]-1))], center = TRUE, scale = TRUE)
+test_km.pca <- prcomp(test_km_X.scaled[,c(1:(dim(test_km)[2]-1))], center = TRUE, scale = TRUE)
+summary(train_km.pca)
+
+# PCA con datos median
+train_median.pca <- prcomp(train_median_X.scaled[,c(1:(dim(train_median)[2]-1))], center = TRUE, scale = TRUE)
+test_median.pca <- prcomp(test_median_X.scaled[,c(1:(dim(test_median)[2]-1))], center = TRUE, scale = TRUE)
+summary(train_median.pca) 
+
+
+```
+
+Nos quedamos únicamente con aquellos componentes que explican un 95% de la varianza.
+
+```{r}
+# Componentes PCA datos training km hasta 95%
+pct_km_var_explained <- train_km.pca$sdev^2 / sum(train_km.pca$sdev^2)
+cumsum(pct_km_var_explained)
+
+train_km_pca <- data.frame(
+    class = train_km$class, 
+    predict(train_km.pca)[, cumsum(pct_km_var_explained) < 0.95]
+)
+
+dim(train_km_pca)
+
+# Componentes PCA datos training median hasta 95%
+pct_median_var_explained <- train_median.pca$sdev^2 / sum(train_median.pca$sdev^2)
+cumsum(pct_median_var_explained)
+
+train_median_pca <- data.frame(
+    class = train_median$class, 
+    predict(train_median.pca)[, cumsum(pct_median_var_explained) < 0.95]
+)
+
+dim(train_median_pca)
+```
+
+Seleccionamos los mismos componentes principales para los conjunto de test.
+
+```{r}
+# Componentes test km PCA
+test_km_pca <- data.frame(
+    class = test_km$class, 
+    predict(test_km.pca)
+)
+test_km_pca<-select(test_km_pca, colnames(train_km_pca))
+
+# Componentes test median PCA
+test_median_pca <- data.frame(
+    class = test_median$class, 
+    predict(test_median.pca)
+)
+test_median_pca<-select(test_median_pca, colnames(train_median_pca))
+```
+
+Limpieza de variables para liberar memoria.
+```{r}
+ctrain<-NULL
+ctrain_km<-NULL
+ctrain_median<-NULL
+ctrain_num<-NULL
+train_km_X.scaled<-NULL
+train_km.pca<-NULL
+train_median_X.scaled<-NULL
+train_median.pca<-NULL
+train.km<-NULL
+histogram<-NULL
+eda_skim<-NULL
+other<-NULL
+ctest<-NULL
+ctest_km<-NULL
+ctest_median<-NULL
+test_km_X.scaled<-NULL
+test_median_X.scaled<-NULL
+test_km.pca<-NULL
+test.km<-NULL
+null_rows<-NULL
+```
+
+Aquí terminaría la fase de limpieza y preprocesamiento de datos. Debe comentarse que esta fase y preprocesamiento ha resultado ser bastante costosa, debido al alto número de faltantes. Por otro lado, la implementación de ciertas técnicas de imputación ha resultado impracticable con nuestros recursos de cálculo
+
+El resultado son de esta etapa son conjuntos de datos de training y testing, para dos técnicas diferentes de imputación, vecinos km y mediana. Asimismo, para estos conjuntos se ha realizado un PCA para reducir el número de variables explicativas manteniendo el 95% de la información. El objetivo de esta variedad de conjunto de datos es validar en la fase de análisis cuál de ellas nos da mejores resultados, sobre las técnicas de análisis a aplicar.
+
+
+******
+# Análisis de los datos
+******
+
+## Selección de los grupos de datos que se quieren analizar/comparar (planificación de los análisis a aplicar).
+
+Los conjuntos de datos que tenemos son los siguientes:
+
+* Datos de training y testeo con imputación basado en k-Means: Tras limpieza y preprocesamiento, 59646 filas y 129 columnas.
+    * PCA con imputación basado en k-Means: Tras aplicación PCA, 59646 filas y 71 columnas.
+    
+* Datos de training y testeo con imputación basado en mediana: Tras limpieza y preprocesamiento, 59646 filas y 129 columnas.
+    * PCA con imputación basado en mediana: Tras aplicación PCA, 59646 filas y 66 columnas.
+      
+      
+Es cierto que la aplicación del PCA dificulta la interpretación de las variables (al ser combinación lineal de las originales), más aun en este caso de Scania donde las variables están anonimizadas. Sin embargo, sí que se ha obtenido una reducción considerable ( 50% de variables para explicar el 95% de la varianza ) del número de variables, aunque el número de variables sigue siendo elevado debido al gran tamaño del conjunto de datos.
+
+El objetivo de este conjunto de datos y, por tanto, del análisis a realizar, es la clasificación de fallo con origen en el APS. Para ello se implementarán las siguientes técnicas:
+
+* Árbol de decisión con el algoritmo c5.0: Se realizará el modelo de árbol de decisión sobre el conjunto de datos de PCA.
+
+* Regresión logística: Se aplicará la regresión logística sobre el conjunto completo de datos tras la limpieza. En concreto, se realizará este ejercicio con los datos no balanceados (como lo son en la realidad), realizando un balanceado aplicando la técnica SMOTE [[6]][paginaweb6] y utilizando pesos para solventar el no equilibrado de casos negativos y positivos.
+
+* Naive Bayes: Se aplica Naive Bayes balanceado (paquete Rose). El paquete NaiveBayes [[7]][paginaweb7] proporciona un algoritmo eficiente para la implantación de Naive Bayes.
+
+La variable que se utilizará para comparar la bondad de los diferentes modelos será el coste total. Al final del apartado de análisis se resumen en una tabla los resultados obtenidos.
+
+
+## Comprobación de la normalidad y homogeneidad de la varianza
+
+En este apartado se analizarán la normalidad y homogeneidad de la varianza. El gran tamaño de la muestra vuelve a ser un reto para aplicar las técnicas de análisis y visualización. Por ejemplo, no se puede utilizar la función shapiro.test porque el tamaño de la muestra debe ser de un máximo de 5000. Se utiliza la función normality() del paquete dlookr, que realiza el test de Shapiro-Wilks a todas las variables numéricas. Si el tamaño de la muestra es superior a 5000, como es el caso, la función realiza una muestra de tamaño 5000 para calcular el estadístico.
+
+**Las variables tienen un valor de significancia menor a 0.05**, por lo que se rechaza la normalidad de la distribución. Se utiliza la función plot_normality (para las 5 primeras variables) para visualizar el resultado de normalidad. En el QQPlot se observa la falta de normalidad, con una pendiente casi horizontal en la parte derecha de los residuos. La función plot_normality además ofrece gráficos de transformadas muy interesantes, en concreto se aprecia que la transformada logarítmica mejora apreciablemente la distribución hacia la normalidad.
+
+Se quiere comprobar si las variables de datos con clase negativa y positiva presentan la misma variabilidad. En el **test de Levene también se rechaza la hipótesis de igualdad de varianzas**.
+
+```{r}
+if (!require("dlookr")) install.packages("dlookr")
+library(dlookr)
+if (!require("car")) install.packages("car")
+library(car)
+library(ggplot2)
+if (!require("cowplot")) install.packages("cowplot")
+library(cowplot)
+
+train<-train_km
+train$class<-as.factor(train$class)
+
+# Visualización de variables numéricas
+plot_normality(train[,2:6])
+
+# Shapiro test para normalidad
+trainx<-train[,-1]
+sample_rows <- sample( 1:nrow(trainx), 4999 )
+train_sample<-trainx[sample_rows,1:50]
+train_sample$aa_000<-as.numeric(train_sample$aa_000)
+train_sample$ac_000<-as.numeric(train_sample$ac_000)
+train_sample$aj_000<-as.numeric(train_sample$aj_000)
+train_sample$al_000<-as.numeric(train_sample$al_000)
+train_sample$am_0<-as.numeric(train_sample$am_0)
+shapiro.test(train_sample$aa_000)
+shapiro.test(train_sample$ac_000)
+shapiro.test(train_sample$aj_000)
+shapiro.test(train_sample$al_000)
+shapiro.test(train_sample$am_0)
+
+# Función normality de dlookr que da como resultado para todas las variables de un data frame el test de shapiro
+normality_test<-normality(trainx,sample=5000)
+head(normality_test,10)
+
+levene.tests<-lapply(train[,2:11],function(x) leveneTest(x ~ train$class))
+```
+
+Se realizan gráficos para 5 primeras variables, mostrando el histograma de la variable y el boxplot, tanto si la variable corresponde a un caso negativo o positivo.
+
+```{r}
+# Distribución de aa_000
+p1<-ggplot(train, aes(aa_000)) + geom_histogram(color="darkblue", fill="lightblue")
+p2<-ggplot(train, aes(x = class, y = aa_000,color=class)) + geom_boxplot(aes(group = class)) + xlab("class") + ylab("aa_000") + theme_get()
+plot_grid(p1, p2)
+
+# Distribución de ac_000
+p1<-ggplot(train, aes(ac_000)) + geom_histogram(color="darkblue", fill="lightblue")
+p2<-ggplot(train, aes(x = class, y = ac_000,color=class)) + geom_boxplot(aes(group = class)) + xlab("class") + ylab("ac_000") + theme_get()
+plot_grid(p1, p2)
+
+# Distribución de ag_000
+p1<-ggplot(train, aes(ag_000)) + geom_histogram(color="darkblue", fill="lightblue")
+p2<-ggplot(train, aes(x = class, y = ag_000,color=class)) + geom_boxplot(aes(group = class)) + xlab("class") + ylab("ag_000") + theme_get()
+plot_grid(p1, p2)
+
+# Distribución de ag_002
+p1<-ggplot(train, aes(ag_002)) + geom_histogram(color="darkblue", fill="lightblue")
+p2<-ggplot(train, aes(x = class, y = ag_002,color=class)) + geom_boxplot(aes(group = class)) + xlab("class") + ylab("ag_002") + theme_get()
+plot_grid(p1, p2)
+
+# Distribución de ag_004
+p1<-ggplot(train, aes(ag_004)) + geom_histogram(color="darkblue", fill="lightblue")
+p2<-ggplot(train, aes(x = class, y = ag_004,color=class)) + geom_boxplot(aes(group = class)) + xlab("class") + ylab("ag_004") + theme_get()
+plot_grid(p1, p2)
+
+p1<-NULL
+p2<-NULL
+
+```
+
+Se realizan también un gráfico de correlaciones de todas las variables numéricas. Para ello se utiliza la función corrplot del paquete dlookr, que permite analizar todas las variables numéricas a la vez. Es una función muy útil para análisis exploratorio EDA. Debido al gran tamaño, se vuelve a repetir con las 15 primeras variables, donde claramente se aprecian en color azul las correlaciones positivas. Posteriormente se visualizan en pares de dos (gráfico de dispersión) las relaciones que han resultado ser significativas, aa_000 con an_000, ao_000,ap_000 y aq_000.
+
+```{r}
+# Explotario correlaciones en variables numéricas
+library(corrplot)
+## corrplot 0.84 loaded
+CP1 <- cor(train_km[,c(2:129)])
+corrplot(CP1, method = "circle")
+
+CP2 <- cor(train_km[,c(2:15)])
+corrplot(CP2, method = "circle")
+
+# Gráficos de dispersión para analizar correlaciones (variables dos a dos)
+p1<-ggplot(train_km, aes(x=train_km$aa_000, y=train_km$an_000)) + geom_point(aes(color=train_km$class))
+p2<-ggplot(train_km, aes(x=train_km$aa_000, y=train_km$ao_000)) + geom_point(aes(color=train_km$class))
+p3<-ggplot(train_km, aes(x=train_km$aa_000, y=train_km$ap_000)) + geom_point(aes(color=train_km$class))
+p4<-ggplot(train_km, aes(x=train_km$aa_000, y=train_km$aq_000)) + geom_point(aes(color=train_km$class))
+plot_grid(p1,p2,p3,p4,nrow=2)
+```
+
+Se han intentado diferentes transformaciones de Box-Cox. Se ha optado por la función Box-Cox del paquete "DescTools", tras analizar los gráficos plot_normality del conjunto de datos train_km. Se ha realizado la transformación logística, con lamda igual a 0. Al no tener que realizar ninguna optimización (si no con tantas variables sería un problema), su ejecución es instantánea. En este caso aparece el problema de los valores infinito (correspondiente al log(0)), que puede traer problemas en la fase de análisis. Se opta por sustituir los valores infinito por 0.5, ya que los valores de las variables superan en su variación la unidad y el infinito en este caso es debido a simple transformación matemática. Se realiza la misma transformación sobre el conjunto de testeo y se guardan los conjuntos de datos como train_bc_km y test_bc_km.
+
+En general, las distribuciones se asemejan más a la normal, excepto en variables con gran cantidad de ceros, como pueden ser la ag_000 o ag_002. En estos casos, incluso con la transformación los resultados no son buenos. En la fase de análisis se comprobará si esta transformación mejora la bondad de los modelos de clasificación y regresión.
+
+```{r}
+if (!require("DescTools")) install.packages("DescTools")
+library(DescTools)
+library(dplyr)
+# Transformada de Box-Cox en training (k-means)
+x<-NULL
+x<-train_km[,c(-1)]
+train_bc_km<-NULL
+train_bc_km$class<-train_km$class
+x<-BoxCox(x, lambda =  0)
+x[x==-Inf]<-0.5
+plot_normality(x[,1:10])
+train_bc_km<-bind_cols(train_bc_km, x)
+
+# Transformada de Box-Cox en testing (k-means)
+x<-NULL
+x<-test_km[,c(-1)]
+test_bc_km<-NULL
+test_bc_km$class<-test_km$class
+x<-BoxCox(x, lambda =  0)
+x[x==-Inf]<-0.5
+#plot_normality(x[,1:10])
+test_bc_km<-bind_cols(test_bc_km,x)
+
+# Transformada de Box-Cox en training (mediana)
+x<-NULL
+x<-train_median[,c(-1)]
+train_bc_median<-NULL
+train_bc_median$class<-train_median$class
+x<-BoxCox(x, lambda =  0)
+x[x==-Inf]<-0.5
+#plot_normality(x[,1:10])
+train_bc_median<-bind_cols(train_bc_median, x)
+
+# Transformada de Box-Cox en testing (mediana)
+x<-NULL
+x<-test_median[,c(-1)]
+test_bc_median<-NULL
+test_bc_median$class<-test_median$class
+x<-BoxCox(x, lambda =  0)
+x[x==-Inf]<-0.5
+#plot_normality(x[,1:10])
+test_bc_median<-bind_cols(test_bc_median,x)
+
+
+
+
+```
+
+
+## Árbol de decisión con el algoritmo c5.0
+
+### c5.0 con datos imputados con k-means
+
+```{r}
+# Carga de conjunto de datos
+train<-train_km_pca
+test<-test_km_pca
+
+# Identificación x e y
+trainx <- train[,2:71]
+trainy <- as.factor(train[,1])
+testx <- test[,2:71]
+testy <- as.factor(test[,1])
+
+# Modelo
+model <- C50::C5.0(trainx, trainy,rules=TRUE )
+summary(model)
+```
+
+Se ha generado un árbol que tiene 39 reglas de decisión y a priori solo tiene un error del 0.8%
+
+```{r}
+model <- C50::C5.0(trainx, trainy)
+plot(model)
+```
+
+Predecimos la clase para los valores de test y calculamos la precisión del árbol.
+
+```{r}
+predicted_model <- predict( model, testx, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+Generamos la matriz de confusión para encontrar mostrar los falsos positivos y los falsos negativos.
+
+```{r}
+mat_conf<-table(testy,Predicted=predicted_model)
+mat_conf
+```
+
+Calculamos el coste de la predicción, los falsos positivos tienen un coste valorado en 10 unidades, en cambio, los falsos negativos tienen un coste valorado en 500 unidades. Se acumulan 267 falsos negativos. El 71.2% de los casos positivos está mal clasificado. El coste total ha sido de 127300 unidades.
+
+```{r}
+coste_total <- mat_conf[1,2]*10 + mat_conf[2,1]*500
+coste_total
+```
+
+### c5.0 con datos imputados con mediana
+
+Se obtiene un modelo con de 50 reglas. La precisión del modelo es 97.39%%. Hay 276 falsos negativos, un número elevado parecido y ligeramente superior al obtenido por el de imputación k-means. El coste total basado en la matriz de confusión es 127300.
+
+```{r}
+# Carga de conjunto de datos
+train<-train_median_pca
+test<-test_median_pca
+
+# Identificación x e y
+trainx <- train[,2:66]
+trainy <- as.factor(train[,1])
+testx <- test[,2:66]
+testy <- as.factor(test[,1])
+
+# Modelo
+model <- C50::C5.0(trainx, trainy,rules=TRUE )
+summary(model)
+```
+
+Se ha generado un árbol que tiene 50 reglas de decisión y a priori solo tiene un error del 0.6%. La visualización del árbol no es buena, sería difícil utilizarlo como herramienta de decisión. 
+
+```{r}
+model <- C50::C5.0(trainx, trainy)
+plot(model)
+```
+
+
+```{r}
+predicted_model <- predict( model, testx, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+Generamos la matriz de confusión para encontrar mostrar los falsos positivos y los falsos negativos. 276 de los 375 casos positivos en el conjunto de testeo se han clasificado de manera incorrecta, lo que representa el 73.6%.
+
+```{r}
+mat_conf<-table(testy,Predicted=predicted_model)
+mat_conf
+```
+
+El coste total ha sido de 127300 unidades.
+
+```{r}
+coste_total <- mat_conf[1,2]*10 + mat_conf[2,1]*500
+coste_total
+
+trainx<-NULL
+trainy<-NULL
+testx<-NULL
+testy<-NULL
+
+```
+
+
+
+## Regresión logística
+
+### Regresión logística sobre imputación k-means
+
+#### Regresión logística sobre imputación k-means, sin transformación Cox-Box
+
+Se realiza una regresión logística sin balancear los datos (positivos y negativos) con los datos sin transformación Box-Cox, donde los perdidos han sido imputados por k-means. Se obtiene un modelo con 49 variables significativas. La precisión del modelo es 98.73%. Hay 139 falsos negativos. El 37% de los positivos está mal clasificado. El coste total basado en la matriz de confusión es 70130.
+
+```{r}
+train_log<-train_km
+test_log<-test_km
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+
+library(caret)  
+
+model_log1 <- glm (class~., data=train_log, family = binomial)
+summary(model_log1)
+```
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff<-data.frame(summary(model_log1)$coef[summary(model_log1)$coef[,4] <= .05,c(4)])
+names(sig_coeff)<-c("p_value")
+dim(sig_coeff)[1]
+rownames(sig_coeff)
+
+
+## Predicción de valores
+predict <- predict(model_log1, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+Se dibuja la curva ROC. La curva ROC es una representación gráfica del rendimiento del clasificador que muestra la distribución de las fracciones de verdaderos positivos y de falsos positivos. El AUC o área de la cuadrícula que queda bajo la curva ROC es 96.94%.
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+
+```
+
+#### Regresión logística sobre imputación k-means, **con transformación Cox-Box**
+
+Se replica el caso anterior, utilizando ahora el conjunto de datos con imputación de perdidos por k-means y **transformación de datos Box-Cox logística**. Se obtiene un modelo con 42 variables significativas. La precisión del modelo es 98.75%. Hay 132 falsos negativos. El 35.2% de los casos positivos están mal clasificados. El coste total basado en la matriz de confusión es 66670. El indicador AIC (cuanto menor mejor) es 3034.
+
+
+```{r}
+train_log<-train_bc_km
+test_log<-test_bc_km
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+prop.table(table(train_log$class))
+table(train_log$class)
+
+library(caret)  
+
+model_log1 <- glm (class~., data=train_log, family = binomial)
+summary(model_log1)
+```
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff<-data.frame(summary(model_log1)$coef[summary(model_log1)$coef[,4] <= .05,c(4)])
+names(sig_coeff)<-c("p_value")
+dim(sig_coeff)[1]
+rownames(sig_coeff)
+
+
+## Predicción de valores
+predict <- predict(model_log1, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+Se dibuja la curva ROC. La curva ROC es una representación gráfica del rendimiento del clasificador que muestra la distribución de las fracciones de verdaderos positivos y de falsos positivos. El AUC o área de la cuadrícula que queda bajo la curva ROC es 98.66%.
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+```
+
+
+
+#### Regresión logística, imputación k-means, datos transformados Box-Cox y con datos balanceados mediante SMOTE 
+
+Se continúa este caso con datos transformados Box-Cot con imputación k-means. Balanceado de datos con SMOTE [[6]]. Se utilizan como parámetros perc.over=300 y perc.under=150. El perc.over amplifica el número de clases de la clase minoritaria, mientras que perc.under aminora la mayoritaria. De esta forma, se balancea la proporción y se obtienen 4482 negativos y 3984 positivos.
+
+Se obtiene un modelo con 48 variables significativas. La precisión del modelo es 95.63%. Hay 32 falsos negativos. Solo el 8.5% de los casos positivos están mal clasificados, una mejora muy significativa. El coste total basado en la matriz de confusión es 22660. El indicador AIC (cuanto menor mejor) es 2051.
+
+
+```{r}
+library(DMwR)
+train_log<-train_bc_km
+test_log<-test_bc_km
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+prop.table(table(train_log$class))
+
+## Smote : Synthetic Minority Oversampling Technique To Handle Class Imbalancy In Binary Classification
+train_balanced <- SMOTE(class ~., train_log, perc.over = 300, k = 5, perc.under = 150)
+summary(train_balanced$class)
+
+library(caret)
+ctrl<-glm.control(epsilon = 1e-8, maxit =100, trace = FALSE)
+model_log2 <- glm (class~., data=train_balanced, family = binomial,control=ctrl)
+summary(model_log2)
+```
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff2<-data.frame(summary(model_log2)$coef[summary(model_log2)$coef[,4] <= .05,c(4)])
+names(sig_coeff2)<-c("p_value")
+dim(sig_coeff2)[1]
+rownames(sig_coeff2)
+
+
+## Predicción de valores
+predict <- predict(model_log2, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+Se dibuja la curva ROC. La curva ROC es una representación gráfica del rendimiento del clasificador que muestra la distribución de las fracciones de verdaderos positivos y de falsos positivos. El AUC o área de la cuadrícula que queda bajo la curva ROC es 97.84%.
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+```
+
+
+#### Regresión logística, imputación k-means, datos transformados Box-Cox y con datos balanceados mediante pesos
+
+Se continúa este caso con datos transformados Box-Cot con imputación k-means. Balanceado de datos con Weights, de forma que el peso de todos los negativos es 0.5 y todos los positivos es 0.5 (suma total de pesos igual a 1). El hecho de incrementat el peso de los positivos hace que el modelo resultante sea más sensible al error de falso negativo. En este caso ninguna de las variables predictoras resulta ser significativa, si bien el modelo se ajusta bien a los datos de testeo y el coste total es muy bajo. Sin embargo, que ninguna variable predictora resulte ser significativa es un mal resultado. 
+
+Si en vez de utilizar los datos transformados Box-Cox se utilizan los datos sin transformar, al modelo le cuesta converger (número de iteraciones máximo impuesto 100) y resulta que las 129 variables son significativas, hecho que tampoco es deseble.
+
+Se muestra la ejecución con datos transformados Box-Cox.Se obtiene un modelo con 0 variables significativas. La precisión del modelo es 95.63%. Hay 23 falsos negativos. El coste total basado en la matriz de confusión es 17770. El indicador AIC (cuanto menor mejor) es 258.
+
+```{r}
+train_log<-train_bc_km
+test_log<-test_bc_km
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+
+# Create model weights (they sum to one)
+
+model_weights <- ifelse(train_log$class == "neg",
+                        (1/table(train_log$class)[1])*0.5 ,
+                        (1/table(train_log$class)[2])*0.5 )
+summary(train_log$class)
+sum(model_weights)
+
+library(caret)
+ctrl<-glm.control(epsilon = 1e-8, maxit =100, trace = FALSE)
+model_log3 <- glm (class~.,data=train_log, weights=model_weights,family = binomial,control=ctrl)
+
+summary(model_log3)
+```
+
+En la matriz de confusión, los falsos negativos se reducen a 23, aunque hayan aumentado los falsos positivos el coste total se reduce a 17770.
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff3<-data.frame(summary(model_log3)$coef[summary(model_log3)$coef[,4] <= .05,c(4)])
+names(sig_coeff3)<-c("p_value")
+dim(sig_coeff3)[1]
+rownames(sig_coeff3)
+
+
+## Predicción de valores
+predict <- predict(model_log3, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+```
+
+
+
+### Regresión logística sobre imputación mediana
+
+Se replica ahora el análisis con datos perdidos imputados por la mediana.
+
+#### Regresión logística, imputación mediana, datos no transformados
+
+Se realiza una regresión logística sin balancear los datos (positivos y negativos) con los datos sin transformación Box-Cox, donde los perdidos han sido imputados por le mediana. Se obtiene un modelo con 37 variables significativas. La precisión del modelo es 98.73%. Hay 133 falsos negativos. El 35% de los positivos está mal clasificado. El coste total basado en la matriz de confusión es 66960.
+
+
+```{r}
+train_log<-train_median
+test_log<-test_median
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+
+library(caret)  
+
+model_log1 <- glm (class~., data=train_log, family = binomial)
+summary(model_log1)
+```
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff<-data.frame(summary(model_log1)$coef[summary(model_log1)$coef[,4] <= .05,c(4)])
+names(sig_coeff)<-c("p_value")
+dim(sig_coeff)[1]
+rownames(sig_coeff)
+
+
+## Predicción de valores
+predict <- predict(model_log1, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+
+```
+
+#### Regresión logística, imputación mediana, datos transformados Box-Cox
+
+Se replica el caso anterior, utilizando ahora el conjunto de datos con imputación de perdidos por mediana y transformación de datos Box-Cox logística. Se obtiene un modelo con 37 variables significativas. La precisión del modelo es 98.93%. Hay 127 falsos negativos. El 33.8% de los positivos está mal clasificado. El coste total basado en la matriz de confusión es 63940.
+
+```{r}
+train_log<-train_bc_median
+test_log<-test_bc_median
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+prop.table(table(train_log$class))
+table(train_log$class)
+
+library(caret)  
+
+model_log1 <- glm (class~., data=train_log, family = binomial)
+summary(model_log1)
+```
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff<-data.frame(summary(model_log1)$coef[summary(model_log1)$coef[,4] <= .05,c(4)])
+names(sig_coeff)<-c("p_value")
+dim(sig_coeff)[1]
+rownames(sig_coeff)
+
+
+## Predicción de valores
+predict <- predict(model_log1, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+```
+
+
+
+#### Regresión logística, imputación mediana, datos transformados Box-Cox y con datos balanceados mediante SMOTE 
+
+Se continúa este caso con datos transformados Box-Cot con imputación con la mediana. Balanceado de datos con SMOTE. Se utilizan como parámetros perc.over=300 y perc.under=150. El perc.over amplifica el número de clases de la clase minoritaria, mientras que perc.under aminora la mayoritaria. De esta forma, se balancea la proporción y se obtienen 4482 negativos y 3984 positivos.
+
+Se obtiene un modelo con 55 variables significativas. La precisión del modelo es 96.12%. Hay 22 falsos negativos. Solo el 5.8% de los casos positivos están mal clasificados, una mejora muy significativa. El coste total basado en la matriz de confusión es 16980. El indicador AIC (cuanto menor mejor) es 1839.
+
+```{r}
+library(DMwR)
+train_log<-train_bc_median
+test_log<-test_bc_median
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+prop.table(table(train_log$class))
+
+## Smote : Synthetic Minority Oversampling Technique To Handle Class Imbalancy In Binary Classification
+train_balanced <- SMOTE(class ~., train_log, perc.over = 300, k = 5, perc.under = 150)
+summary(train_balanced$class)
+
+library(caret)
+ctrl<-glm.control(epsilon = 1e-8, maxit =100, trace = FALSE)
+model_log2 <- glm (class~., data=train_balanced, family = binomial,control=ctrl)
+summary(model_log2)
+```
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff2<-data.frame(summary(model_log2)$coef[summary(model_log2)$coef[,4] <= .05,c(4)])
+names(sig_coeff2)<-c("p_value")
+dim(sig_coeff2)[1]
+rownames(sig_coeff2)
+
+
+## Predicción de valores
+predict <- predict(model_log2, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+```
+
+
+```{r}
+#ROCR Curve
+library(ROCR)
+ROCRpred <- prediction(predict, test_log$class)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+```
+
+
+### Regresión logística, imputación mediana, datos transformados Box-Cox y con datos balanceados mediante pesos
+
+Se continúa este caso con datos transformados Box-Cox con imputación por mediana. Balanceado de datos con Weights, de forma que el peso de todos los negativos es 0.5 y todos los positivos es 0.5 (suma total de pesos igual a 1). El hecho de incrementar el peso de los positivos hace que el modelo resultante sea más sensible al error de falso negativo. En este caso ninguna de las variables predictoras resulta ser significativa, si bien el modelo se ajusta bien a los datos de testeo y el coste total es muy bajo. Sin embargo, que ninguna variable predictora resulte ser significativa es un mal resultado. EL número de iteraciones para llegar al resultado ha sido 12 y el AIC final de 258. El coste total es 16650. 
+
+Si en vez de utilizar los datos transformados Box-Cox se utilizan los datos sin transformar, al modelo le cuesta converger (número de iteraciones máximo impuesto 100) y resulta que las 129 variables son significativas, hecho que tampoco es deseble.
+
+Se muestra la ejecución con datos transformados Box-Cox.
+
+```{r}
+train_log<-train_bc_median
+test_log<-test_bc_median
+train_log$class[train_log$class=="neg"]<-"0"
+train_log$class[train_log$class=="pos"]<-"1"
+train_log$class<-as.factor(train_log$class)
+levels(train_log$class)<- c('neg', 'pos')
+
+summary(train_log$class)
+
+# Create model weights (they sum to one)
+
+model_weights <- ifelse(train_log$class == "neg",
+                        (1/table(train_log$class)[1]) * 0.5,
+                        (1/table(train_log$class)[2]) * 0.5)
+summary(train_log$class)
+sum(model_weights)
+
+library(caret)
+ctrl<-glm.control(epsilon = 1e-8, maxit =100, trace = FALSE)
+model_log3 <- glm (class~.,data=train_log, weights=model_weights,family = binomial,control=ctrl)
+
+summary(model_log3)
+```
+
+En la matriz de confusión, los falsos negativos se reducen a 23, aunque hayan aumentado los falsos positivos el coste total se reduce a 17770.
+
+```{r}
+# Mostrar las variables significativas (p<0.05)
+sig_coeff3<-data.frame(summary(model_log3)$coef[summary(model_log3)$coef[,4] <= .05,c(4)])
+names(sig_coeff3)<-c("p_value")
+dim(sig_coeff3)[1]
+rownames(sig_coeff3)
+
+
+## Predicción de valores
+predict <- predict(model_log3, test_log, type = 'response')
+
+## Matriz de confusión
+cm<-table(test_log$class, predict > 0.5)
+cm
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_log <- cm[1,2]*10 + cm[2,1]*500
+coste_total_log
+# AUC value
+auc_ROCR <- performance(ROCRpred, measure = "auc")
+auc_ROCR <- auc_ROCR@y.values[[1]];auc_ROCR
+```
+
+```{r,warning = FALSE}
+train_log<-NULL
+test_log<-NULL
+```
+
+## Naive Bayes
+
+El último algoritmo implantado es Naive Bayes. El paquete NaiveBayes proporciona un algoritmo eficiente para la implantación de Naive Bayes. Por ejemplo, se han realizado pruebas con el Naive Bayes del paquete caret, oteniendo unos tiempos superiores a 10 minutos, dado al gran tamaño de la muestra. En cambio con el paquete NaiveBayes es mucho más rápido.Se ha aplicado Naive Bayes a los datos imputados por k-means y con transformación Box-Cox. Se ha realizado el balanceado de la muestra mediante ROSE.
+
+La precisión del modelo es 94.35%. Hay 39 falsos negativos. El coste total basado en la matriz de confusión es 28135, also peor al obtenido a la regresiín logística balanceado con SMOTE.Hay que destacar la rapidez de la ejecución.
+
+```{r,warning = FALSE}
+if (!require("e1071")) install.packages("e1071")
+library(e1071) # Naive Bayes en este paquete
+if (!require("ROSE")) install.packages("ROSE")
+library(ROSE) # ROSE para balanceado
+
+
+# ModeloS
+train_balanced <- ROSE(class ~ ., data=train_bc_km)$data
+train_balanced$class<-as.factor(train_balanced$class)
+test_nb<-test_bc_km
+test_nb$class<-as.factor(test_nb$class)
+
+model_nb <- naiveBayes(class ~ ., data = train_balanced)
+#model_nb
+summary(model_nb)
+
+## Predicción de valores
+prediction <- predict(model_nb, as.data.frame(test_nb))
+
+## Matriz de confusión
+cm <- table(test_nb$class,prediction)
+cm
+cm_stat<-confusionMatrix(cm,positive="pos")
+cm_stat
+precision<-(cm[1,1]+cm[2,2])/sum(cm);precision
+
+## Coste Total
+coste_total_nb <- cm[1,2]*10 + cm[2,1]*500
+coste_total_nb
+
+```
+
+## Resumen de resultados
+
+El mejor resultado se ha obtenido con la regresión logística, utilizando la técnica SMOTE para balancear los datos. Si bien los resultados han sido mejores con el balanceo por pesos, el modelo resultado ha obtenido 0 variables significativas, lo que no es admisible. Cabe destacar cómo han reducido los falsos negativos al balancear los datos con SMOTE, ya que el problema de los algorimtos de clasificación es que tienden a favorecer la clase mayoritaria (si no se utiliza otra técnica para balancear casos).
+
+Se resumen en la tabla los resultados obtenidos en los diferentes análisis:
+
+| Modelo      | Imputación | Transformación   |  Balanceo   |  Precisión   |Falso Neg.   | Coste Total | Reglas/Var.Sig |Comentario   |
+| :---------: | :--------: | :--------------: |:-----------:|:------------:|:-----------:|:-----------:|:--------------:|:-----------:|
+| c5.0        | k-means    | Datos PCA        | No          | 97.24%       | 267 (71.2%) |  135240     |39 reglas       |             |
+| c5.0        | mediana    | Datos PCA        | No          | 97.39%       | 276 (73.5%) |  127300     | 50 reglas      |             |
+| Reg.Log     | k-means    | No               | No          | 98.73%       | 139 (37.0%) |  70135      |49 var. sig.    |             |
+| Reg.Log     | k-means    | Box-Cox          | No          | 98.75%       | 132 (35.2%) |  66670      |42 var. sig     |             |
+| Reg.Log     | k-means    | Box-Cox          | SMOTE       | 95.94%       | 32  (8.5%   |  22660      |48 var. sig     |             |
+| Reg.Log     | k-means    | Box-Cox          | Weights     | 97.70%       | 23 (6.1%)   |  17770      | 0!!!           | 0 var.sig.!!|
+| Reg.Log     | mediana    | No               | No          | 98.80%       | 133 (35.4%) |  66960      |37 var. sig.    |             |
+| Reg.Log     | mediana    | Box-Cox          | No          | 98.93%       | 127 (35.2%) |  63940      |51 var. sig     |             |
+| Reg.Log     | mediana    | Box-Cox          | SMOTE       | 96.26%       | 22  (8.5%   |  16980      |55 var. sig     |             |
+| Reg.Log     | mediana    | Box-Cox          | Weights     | 98.35%       | 21 (5.6%)   |  16650      | 0!!!           | 0 var.sig.!!|
+| Naive Bayes | k-means    | Box-Cox          | ROSE (50%)  | 94.35%       | 39 (10.4%)  |  28150      |                |             |
+
+
+******
+
+# Conclusiones
+******
+
+El objetivo de esta práctica ha sido profundizar en las técnicas de limpieza y análisis de datos median un caso de uso. El conjunto de datos seleccionado ha sido el **APS Failure at Scania Trucks**. El objetivo final de trabajo es predecir con los datos proporcionados si un fallo puede deberse al sistema APS. Se proporciona un conjunto de datos de entrenamiento (60000 filas y 171 atributos) y testeo (16000 filas y 171 atributos). Todas las variables están anonimizadas. El conjunto de datos está desequilibrado entre los negativos (98.88%) y positivos (1.12%).
+
+El trabajo ha comenzado con la limpieza de datos y tratamiento de perdidos y ceros. El conjunto de datos de entrenamiento tiene un tamaño elevado, por lo que se han utilizado técnicas exploratorias para adquirir de forma ágil información de todas las variables. El conjunto de datos original incluía un alto número de perdidos (169 columnas de 171 presentaban algún valor perdido). Se han eliminado columnas con perdidos superiores al 20% (24 variables). Para el resto de datos perdidos, se ha optado por la función ClustImpute (función ClustImpute) que realiza una función por cluster k-means. También se ha utilizado la imputación más habitual por la mediana y comparado más adelante en la fase de análisis los resultados de ambas imputaciones. Como se ha comentado, no ha resultado posible la imputación con missForest, debido al gran tamaño de la muestra (se ha realizado un ejemplo con una muestra menor con resultado satisfactorio). Para terminar con la fase de preprocesamiento, se ha utilizado también el Análisis de Componentes Principales, sí que se ha obtenido una reducción considerable ( 50% de variables para explicar el 95% de la varianza ) del número de variables, aunque el número de variables sigue siendo elevado. Los datos no presentaban una distribución normal. Se ha optado por una transformación Box-Cox logística (lamda=0) para mejorar su semejanza en la normal, pero en los casos de muchos ceros la distribución ha seguido teniendo una distribución diferente a la normal.
+
+En la fase de análisis, se han utilizado el árbol de decisión c5.0, regresión logística y Naive Bayes, en diferentes escenarios. El mejor resultado se ha obtenido con la regresión logística, utilizando la técnica SMOTE para balancear los datos. Cabe destacar cómo se han reducido los falsos negativos al balancear los datos con SMOTE, ya que el problema de los algorimtos de clasificación es que tienden a favorecer la clase mayoritaria (si no se utiliza otra técnica para balancear casos). En el caso de Naive Bayes se ha utilizado el paquete ROSE para el balanceo de datos.
+
+El mejor coste total del modelo de predicción ha resultado ser con el modelo de regresión logística con SMOTE, sobre datos imputados con la mediana, obteniéndose un coste total de 16980.
+
+Por último, el principal reto de este conjunto de datos de SCANIA ha sido el gran tamaño del mismo (tanto número de filas como de columnas), seguido del desequilibrio entre las clases positivo y negativa. Para trabajar con grandes volúmenes de datos, es importante utilizar técnicas exploratorias (EDA, Exploratory Data Analysis) que nos permitan obtener información general de todas las variables de un "vistazo", así como utilizar técnicas de análisis eficientes computacionalmente. Durante el trabajo hemos descubierto paquetes como skimr, ClustImpute, dlookr o NaiveBayes, que han facilitado nuestro análisis. El otro reto ha sido el desequilibrio entre las clases positivas y negativas, donde se han descubierto técnicas como SMOTE y ROSE que solucionan el problema mediantes upsampling, downsampling o "mixto".
+
+******
+# Contribuciones
+******
+
+Los autores de este trabajo Iván Jiménez (IJ) e Itziar Ricondo (IR) han contribuido en las diferentes fases del trabajo, como consta en las siguientes firmas.
+
+| Contribuciones                | Firma      | 
+| :---------------------------: | :--------: | 
+| Investigación previa          | IJ,IR      | 
+| Redacción de las respuestas   | IJ,IR      |
+| Desarrollo de código          | IJ,IR      |
+
+
+******
+# Referencias
+******
+
+[1] https://archive.ics.uci.edu/ml/datasets/APS+Failure+at+Scania+Trucks
+
+[2] https://www.r-bloggers.com/2019/06/how-data-tables-fread-can-save-you-a-lot-of-time-and-memory-and-take-input-from-shell-commands/
+
+[3] https://www.datanovia.com/en/blog/display-a-beautiful-summary-statistics-in-r-using-skimr-package/
+
+[4] https://www.r-bloggers.com/2019/06/intoducing-clustimpute-a-new-approach-for-k-means-clustering-with-build-in-missing-data-imputation/
+
+[5] https://rpubs.com/lmorgan95/MissForest
+
+[6] https://www.rdocumentation.org/packages/DMwR/versions/0.4.1/topics/SMOTE
+
+[7] https://rdrr.io/cran/naivebayes/
+
+
+[paginaweb1]: https://archive.ics.uci.edu/ml/datasets/APS+Failure+at+Scania+Trucks
+
+[paginaweb2]: https://www.r-bloggers.com/2019/06/how-data-tables-fread-can-save-you-a-lot-of-time-and-memory-and-take-input-from-shell-commands/
+
+[paginaweb3]: https://www.datanovia.com/en/blog/display-a-beautiful-summary-statistics-in-r-using-skimr-package/
+
+[paginaweb4]: https://www.r-bloggers.com/2019/06/intoducing-clustimpute-a-new-approach-for-k-means-clustering-with-build-in-missing-data-imputation/
+
+[paginaweb5]: https://rpubs.com/lmorgan95/MissForest
+
+[paginaweb6]: https://www.rdocumentation.org/packages/DMwR/versions/0.4.1/topics/SMOTE
+
+[paginaweb7]: https://rdrr.io/cran/naivebayes/
